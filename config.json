@@ -6,12 +6,12 @@
   "language": "ar",
   "timezone": "Africa/Algiers",
 
-  "ownerID": "100012345678",
-  "adminBot": [100004505559262],
-  "superAdminBot": [100004505559262],
+  "ownerID": "61590030681333",
+  "adminBot": [61590030681333],
+  "superAdminBot": [61590030681333],
 
   "adminOnly": {
-    "enable": true,
+    "enable": false,
     "note": "عند التفعيل يرد البوت فقط على الأدمن"
   },
 
