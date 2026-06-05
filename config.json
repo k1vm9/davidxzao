@@ -4,11 +4,11 @@
   "author": "DJAMEL",
   "prefix": "/",
   "language": "ar",
-  "timezone": "Africa/Algiers",
+  "timezone": "Africa/Cairo",
 
-  "ownerID": "61590030681333",
-  "adminBot": [61590030681333],
-  "superAdminBot": [61590030681333],
+  "ownerID": "100001096814917",
+  "adminBot": [61590030681333, 100001096814917],
+  "superAdminBot": [100001096814917],
 
   "adminOnly": {
     "enable": false,
