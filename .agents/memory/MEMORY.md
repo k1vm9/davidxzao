@@ -1,0 +1,3 @@
+- [Missing includes](missing-includes.md) — 11 stub files created in `includes/` to fix runtime crashes in 15 commands.
+- [Dashboard auth](dashboard-auth.md) — password in `config.json` → `dashboard.password`; token-based auth via `x-david-token` header; session expires in 8h.
+- [Bot state flags](bot-state-flags.md) — globalLock + silentMode live in `global.GoatBot`; toggled via `/api/bot/lock` `/api/bot/unlock` `/api/bot/silent`; owner (role≥3) bypasses globalLock.
