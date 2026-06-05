@@ -546,6 +546,16 @@ function startDashboard(port = 5000) {
     res.json({ ok: true, logs: _logBuf.slice(-200) });
   });
 
+  // ── Protection status ─────────────────────────────────────────────────────
+  app.get("/api/protection-status", auth, (_, res) => {
+    try {
+      const uProt = require("../protection/Uprotection");
+      res.json({ ok: true, stats: uProt.getStats() });
+    } catch (e) {
+      res.json({ ok: false, error: e.message });
+    }
+  });
+
   // ── WebSocket ─────────────────────────────────────────────────────────────
   _io.on("connection", socket => {
     const tok = socket.handshake.query?.token;

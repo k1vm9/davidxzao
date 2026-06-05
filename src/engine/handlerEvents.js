@@ -6,6 +6,26 @@
 
 const rateLimit = require("../protection/rateLimit");
 
+// ─── Global Duplicate Guard ──────────────────────────────────────────────────
+// Prevents the same messageID from being processed twice when multiple
+// listeners (MQTT + Long-Poll) fire simultaneously for the same event.
+const _processedIDs = new Set();
+const _processedTS  = new Map();
+const DEDUP_TTL_MS  = 60 * 1000; // 60 seconds
+
+function isDuplicate(messageID) {
+  if (!messageID) return false;
+  if (_processedIDs.has(messageID)) return true;
+  _processedIDs.add(messageID);
+  _processedTS.set(messageID, Date.now());
+  // Clean up IDs older than TTL
+  const cutoff = Date.now() - DEDUP_TTL_MS;
+  for (const [id, ts] of _processedTS) {
+    if (ts < cutoff) { _processedIDs.delete(id); _processedTS.delete(id); }
+  }
+  return false;
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 function getRole(senderID) {
   const cfg     = global.GoatBot?.config || {};
@@ -103,8 +123,11 @@ async function onEventCmds(api, event, commands) {
   if (!event || !api) return;
   global.lastMqttActivity = Date.now();
 
-  const { type, senderID, threadID, body = "" } = event;
+  const { type, senderID, threadID, body = "", messageID } = event;
   if (!senderID || !threadID) return;
+
+  // Dedup — drop if same messageID already handled by another listener
+  if (messageID && isDuplicate(messageID)) return;
 
   // Dashboard stats
   try {
@@ -146,7 +169,7 @@ async function onEventCmds(api, event, commands) {
   if (adminOnly && role < 2) return;
 
   // Global command lock (owner can still use commands)
-  if (global.GoatBot?.globalLock && role < 3) return;
+  if (global.GoatBot?.globalLock && role < 2) return;
 
   // Silent mode — bot reads but does not respond
   if (global.GoatBot?.silentMode) return;

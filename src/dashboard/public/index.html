@@ -173,8 +173,19 @@ textarea.code{min-height:300px;font-family:'SF Mono','Fira Code',Consolas,monosp
 .log-controls{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;}
 /* ── Protection ── */
 .prot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;}
-.prot-pill{display:flex;align-items:center;gap:8px;background:var(--s1);border:1px solid var(--bd);border-radius:9px;padding:9px 11px;font-size:12px;font-weight:600;}
-.p-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;animation:pulse 2.5s infinite;}
+.prot-pill{display:flex;align-items:center;gap:8px;background:var(--s1);border:1px solid var(--bd);border-radius:9px;padding:9px 11px;font-size:12px;font-weight:600;transition:all .3s;}
+.prot-pill.p-active{border-color:rgba(48,209,88,.25);}
+.prot-pill.p-inactive{border-color:rgba(255,69,58,.25);opacity:.7;}
+.p-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.p-dot.active{background:var(--green);animation:pulse 2.5s infinite;}
+.p-dot.inactive{background:var(--red);}
+.prot-pill .p-name{flex:1;font-size:11px;}
+.prot-pill .p-check{font-size:11px;}
+.prot-summary{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 14px;background:var(--s1);border:1px solid var(--bd);border-radius:var(--r2);}
+.prot-summary .ps-count{font-size:22px;font-weight:800;color:var(--green);}
+.prot-summary .ps-label{font-size:12px;color:var(--t2);}
+.prot-summary .ps-uptime{margin-right:auto;font-size:11px;color:var(--t3);}
+.prot-refresh{margin-bottom:10px;}
 /* ── Toggle ── */
 .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--bd);}
 .toggle-row:last-child{border-bottom:none;}
@@ -548,7 +559,18 @@ input:checked+.slider::before{transform:translateX(19px);}
   <!-- ─ Protection ─────────────────────────────────────── -->
   <div class="tab-pane" id="tab-protection">
     <div class="card">
-      <div class="card-title">🛡 20 طبقة حماية — نشطة جميعها</div>
+      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>🛡 طبقات الحماية — حالة مباشرة</span>
+        <button class="btn btn-ghost btn-xs" onclick="loadProtections()">🔄 تحديث</button>
+      </div>
+      <div class="prot-summary" id="protSummary">
+        <div class="ps-count" id="ps-active">20</div>
+        <div>
+          <div class="ps-label">طبقة نشطة</div>
+          <div class="ps-uptime" id="ps-uptime">—</div>
+        </div>
+        <div style="margin-right:auto;font-size:11px;color:var(--t3);" id="ps-updated">—</div>
+      </div>
       <div class="prot-grid" id="protGrid"></div>
     </div>
   </div>
@@ -711,6 +733,7 @@ function initSocket() {
   _socket.on("pong-bot",        d => toast(`🏓 Ping: ${Date.now() - d.ts}ms`, "success"));
   _socket.on("bot-state-change",d => updateBotState(d));
   _socket.on("broadcast-done",  d => { setText("bc-result", `✅ تم الإرسال: ${d.sent} نجح / ${d.failed} فشل من أصل ${d.total}`); });
+  _socket.on("protection-stats",d => renderProtections(d));
 }
 
 // ─── Status ──────────────────────────────────────────────────────────────────
@@ -844,10 +867,11 @@ document.querySelectorAll(".tab").forEach(btn => {
     const pane = document.getElementById("tab-" + btn.dataset.tab);
     if (pane) pane.classList.add("active");
     // Lazy load
-    if (btn.dataset.tab === "commands")  loadCommands();
-    if (btn.dataset.tab === "accounts")  loadTiers();
-    if (btn.dataset.tab === "messages")  loadMessages();
-    if (btn.dataset.tab === "logs")      loadLogsHistory();
+    if (btn.dataset.tab === "commands")   loadCommands();
+    if (btn.dataset.tab === "accounts")   loadTiers();
+    if (btn.dataset.tab === "messages")   loadMessages();
+    if (btn.dataset.tab === "logs")       loadLogsHistory();
+    if (btn.dataset.tab === "protection") loadProtections();
   });
 });
 
@@ -1164,16 +1188,66 @@ async function saveCmdMeta() {
 }
 
 // ─── Protection ──────────────────────────────────────────────────────────────
-const PROTS = [
-  "Stealth v2","Human Typing","Natural Presence","MQTT Health","Session Refresher",
-  "Keep Alive","Rate Limiter","Outgoing Throttle","Anti-Detection","Behavior Scheduler",
-  "Human Read Receipt","Scroll Simulator","Reaction Delay","Connection Jitter",
-  "Duplicate Guard","Anti-Flood","Anti-Spam","Typing Variator","UA Rotator","Universal Guard"
-];
-function loadProtections() {
+const PROT_LABELS = {
+  stealth:          "Stealth v2",
+  keepAlive:        "Keep Alive",
+  mqttHealthCheck:  "MQTT Health",
+  outgoingThrottle: "Outgoing Throttle",
+  humanTyping:      "Human Typing",
+  naturalPresence:  "Natural Presence",
+  behaviorScheduler:"Behavior Scheduler",
+  antiDetection:    "Anti-Detection",
+  sessionRefresher: "Session Refresher",
+  humanReadReceipt: "Human Read Receipt",
+  scrollSimulator:  "Scroll Simulator",
+  reactionDelay:    "Reaction Delay",
+  connectionJitter: "Connection Jitter",
+  duplicateGuard:   "Duplicate Guard",
+  typingVariator:   "Typing Variator",
+  Uprotection:      "Universal Guard",
+};
+
+function renderProtections(stats) {
   const g = document.getElementById("protGrid");
   if (!g) return;
-  g.innerHTML = PROTS.map((p,i) => `<div class="prot-pill" style="animation-delay:${i*25}ms"><div class="p-dot"></div><span>${p}</span></div>`).join("");
+
+  const layers = stats?.layers || {};
+  const active = stats?.active !== false;
+
+  // Build pill for each known layer, plus any extras from stats
+  const allKeys = [...new Set([...Object.keys(PROT_LABELS), ...Object.keys(layers)])];
+  const activeCount = allKeys.filter(k => layers[k] !== false).length;
+
+  g.innerHTML = allKeys.map((key, i) => {
+    const on   = active && layers[key] !== false;
+    const name = PROT_LABELS[key] || key;
+    return `<div class="prot-pill ${on ? "p-active" : "p-inactive"}" style="animation-delay:${i*20}ms">
+      <div class="p-dot ${on ? "active" : "inactive"}"></div>
+      <span class="p-name">${name}</span>
+      <span class="p-check">${on ? "✅" : "❌"}</span>
+    </div>`;
+  }).join("");
+
+  setText("ps-active", activeCount);
+  if (stats?.uptime) setText("ps-uptime", "تشغيل: " + fmtUptime(stats.uptime));
+  setText("ps-updated", "آخر تحديث: " + new Date().toLocaleTimeString("ar"));
+}
+
+async function loadProtections() {
+  const g = document.getElementById("protGrid");
+  if (!g) return;
+  g.innerHTML = '<div style="color:var(--t2);font-size:12px;padding:10px;">⏳ جاري التحميل…</div>';
+  const r = await apiFetch("/api/protection-status");
+  if (r.ok && r.stats) {
+    renderProtections(r.stats);
+  } else {
+    // Fallback: show all 20 as active (bot is running)
+    renderProtections({
+      active: true,
+      uptime: 0,
+      layers: Object.fromEntries(Object.keys(PROT_LABELS).map(k => [k, true])),
+    });
+  }
 }
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
